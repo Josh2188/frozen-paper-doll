@@ -125,7 +125,20 @@
     .item:hover { transform: translateY(-3px) scale(1.05); border-color: var(--secondary); box-shadow: 0 8px 12px rgba(255, 105, 180, 0.3); }
     .item.equipped { border-color: #ff69b4; background: #fce7f3; box-shadow: 0 0 10px rgba(255, 105, 180, 0.5); }
 
-    /* 🌟 核心改動：移除背景控制區的 CSS 樣式，釋放空間 */
+    /* --- 背景控制區縮小版 (已加回) --- */
+    .bg-controls {
+        background: rgba(255,255,255,0.8); border-radius: 12px; padding: 10px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    .bg-controls-title { font-weight: bold; color: #4a5568; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; font-size: 13px;}
+    .bg-btn-row { display: flex; gap: 6px; margin-bottom: 6px; }
+    .bg-btn { 
+        flex: 1; padding: 6px; border: none; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer;
+        background: #f1f5f9; color: #475569; transition: 0.2s;
+    }
+    .bg-btn:hover { background: #e2e8f0; }
+    .bg-btn-auto { width: 100%; background: #8b5cf6; color: white; padding: 8px; border-radius: 8px; font-weight: bold; font-size: 13px; border: none; cursor: pointer; transition: 0.2s;}
+    .bg-btn-auto.paused { background: #cbd5e1; color: #475569; }
 
     #loading-overlay {
         position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -199,7 +212,17 @@
 
         <div id="items"></div>
 
-        <!-- 🌟 核心改動：已移除背景控制儀表板，將空間全數還給 items (衣櫃) -->
+        <!-- 🌟 背景控制儀表板 (已加回) -->
+        <div class="bg-controls">
+            <div class="bg-controls-title"><i class="ph-fill ph-image"></i> 場景背景控制</div>
+            <div class="bg-btn-row">
+                <button onclick="manualChangeBg(-1)" class="bg-btn"><i class="ph ph-caret-left"></i> 上一張</button>
+                <button onclick="manualChangeBg(1)" class="bg-btn">下一張 <i class="ph ph-caret-right"></i></button>
+            </div>
+            <button onclick="toggleAutoBg()" id="btn-autobg" class="bg-btn-auto">
+                🟢 自動輪播：開啟中
+            </button>
+        </div>
     </div>
 </div>
 
@@ -368,10 +391,12 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 });
 
 // ==========================================
-// 4. 背景自動輪播系統 (簡化版：隱藏控制介面，安靜輪播)
+// 4. 背景手動/自動輪播控制系統 (完整版加回)
 // ==========================================
 const bgList = ['bg1.jpg', 'bg2.jpg', 'bg3.jpg', 'bg4.jpg', 'bg5.jpg'];
 let currentBgIndex = 0;
+let isAutoBg = true;
+let autoTimer = null;
 const dollArea = document.getElementById('doll-area');
 
 // 渲染當前背景
@@ -383,12 +408,39 @@ function applyBg() {
     tempImg.onerror = () => { dollArea.style.backgroundColor = '#e0f7fa'; };
 }
 
-// 啟動計時器 (30秒自動換一次)
+// 啟動計時器 (30秒換一次)
 function startAutoTimer() {
-    setInterval(() => {
-        currentBgIndex = (currentBgIndex + 1) % bgList.length;
-        applyBg();
-    }, 30000); 
+    if (autoTimer) clearInterval(autoTimer);
+    if (isAutoBg) {
+        autoTimer = setInterval(() => {
+            currentBgIndex = (currentBgIndex + 1) % bgList.length;
+            applyBg();
+        }, 30000); 
+    }
+}
+
+// 手動切換 (上/下一張)
+function manualChangeBg(direction) {
+    currentBgIndex = (currentBgIndex + direction + bgList.length) % bgList.length;
+    applyBg();
+    
+    // 手動切換後重置計時器，避免馬上又被自動切換
+    if (isAutoBg) startAutoTimer();
+}
+
+// 開關自動切換功能
+function toggleAutoBg() {
+    isAutoBg = !isAutoBg;
+    const btn = document.getElementById('btn-autobg');
+    if (isAutoBg) {
+        btn.innerHTML = '🟢 自動輪播：開啟中';
+        btn.classList.remove('paused');
+        startAutoTimer();
+    } else {
+        btn.innerHTML = '⚪ 自動輪播：已暫停';
+        btn.classList.add('paused');
+        clearInterval(autoTimer);
+    }
 }
 
 // ==========================================
@@ -399,12 +451,20 @@ function takePhoto() {
     const overlay = document.getElementById('loading-overlay');
     overlay.style.opacity = '1'; 
     
+    // 🌟 核心修正：動態計算實際渲染寬高，並強制輸出 1920x1080 原生比例
+    const rect = targetArea.getBoundingClientRect();
+    const captureWidth = rect.width;
+    const captureHeight = captureWidth * (1080 / 1920); // 強制鎖定 16:9 比例
+    const outputScale = 1920 / captureWidth; // 強制放大回 1920 高畫質
+
     setTimeout(() => {
         html2canvas(targetArea, {
             useCORS: true, 
             allowTaint: true, 
             backgroundColor: null, 
-            scale: 2,
+            scale: outputScale, // 替換原本固定的 scale: 2
+            width: captureWidth, // 告訴相機精準的寬度
+            height: captureHeight, // 告訴相機精準的 16:9 高度
             ignoreElements: (element) => element.id === 'loading-overlay' 
         }).then(canvas => {
             const link = document.createElement('a');
