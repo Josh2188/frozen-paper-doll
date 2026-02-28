@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>魔法配件對齊校正器 📐✨</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
+<style>
+    :root {
+        --primary: #9b51e0;
+        --secondary: #ff69b4;
+        --bg: #f3e8ff;
+    }
+    body {
+        font-family: 'Nunito', 'Noto Sans TC', sans-serif; background: var(--bg);
+        display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; color: #333;
+    }
+    .container {
+        background: white; padding: 30px; border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(155, 81, 224, 0.2); max-width: 900px; width: 100%;
+        display: flex; gap: 30px; align-items: flex-start;
+    }
+    .panel { flex: 1; display: flex; flex-direction: column; gap: 15px; }
+    
+    h1 { color: var(--primary); margin-top: 0; display: flex; align-items: center; gap: 10px; font-size: 24px; }
+    
+    .upload-box {
+        background: #f8f9fa; border: 2px dashed var(--primary); padding: 15px;
+        border-radius: 12px; cursor: pointer; text-align: center; transition: all 0.2s;
+    }
+    .upload-box:hover { background: #f3e8ff; }
+    input[type="file"] { display: none; }
+    
+    .preview-container {
+        width: 420px; height: 620px; border: 2px solid #ddd; border-radius: 16px;
+        background: repeating-conic-gradient(#eee 0% 25%, transparent 0% 50%) 50% / 20px 20px;
+        position: relative; overflow: hidden; cursor: grab; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .preview-container:active { cursor: grabbing; }
+    
+    canvas { display: block; }
+
+    .instructions {
+        background: #e0f2fe; color: #0284c7; padding: 15px; border-radius: 12px; font-size: 14px; line-height: 1.6;
+    }
+
+    .slider-group { display: flex; flex-direction: column; gap: 5px; }
+    input[type="range"] { accent-color: var(--secondary); }
+
+    button {
+        background: linear-gradient(45deg, var(--primary), var(--secondary)); color: white;
+        border: none; padding: 15px; font-size: 16px; font-weight: bold; border-radius: 12px;
+        cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.2s;
+    }
+    button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(155, 81, 224, 0.3); }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <!-- 左側：畫布預覽區 -->
+    <div class="preview-container" id="canvas-wrapper">
+        <canvas id="canvas" width="420" height="620"></canvas>
+    </div>
+
+    <!-- 右側：控制面板 -->
+    <div class="panel">
+        <h1><i class="ph-fill ph-magic-wand"></i> 配件對齊校正器</h1>
+        
+        <div class="instructions">
+            <b>操作步驟：</b><br>
+            1. 載入基底圖 (當作半透明參考)。<br>
+            2. 載入配件圖 (會自動去除純色背景)。<br>
+            3. 在左側畫布<b>拖曳移動</b>、使用滑鼠<b>滾輪縮放</b>，將衣服對準基底。<br>
+            4. 點擊匯出，即可得到完美 1:1 的透明 PNG！
+        </div>
+
+        <label class="upload-box">
+            <i class="ph ph-user" style="font-size: 24px; color: var(--primary);"></i>
+            <div style="font-weight: bold; color: var(--primary);">1. 載入基底圖 (如 elsa-base.jpg)</div>
+            <input type="file" id="baseInput" accept="image/*">
+        </label>
+
+        <label class="upload-box">
+            <i class="ph ph-t-shirt" style="font-size: 24px; color: var(--secondary);"></i>
+            <div style="font-weight: bold; color: var(--secondary);">2. 載入配件圖 (如 item1.jpg)</div>
+            <input type="file" id="itemInput" accept="image/*">
+        </label>
+
+        <div class="slider-group">
+            <label>🔍 手動微調縮放比例：</label>
+            <input type="range" id="scaleSlider" min="0.1" max="3" step="0.01" value="1">
+        </div>
+
+        <button id="downloadBtn"><i class="ph-fill ph-download-simple"></i> 匯出完美對齊配件</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const baseInput = document.getElementById('baseInput');
+    const itemInput = document.getElementById('itemInput');
+    const scaleSlider = document.getElementById('scaleSlider');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const wrapper = document.getElementById('canvas-wrapper');
+
+    let baseImg = new Image();
+    let itemImg = new Image();
+    let processedItemImg = new Image(); // 存放去背後的配件
+
+    // 🌟 新增：用來記住您上傳的原始檔名
+    let originalItemFilename = 'aligned_item.png';
+
+    // 配件的狀態 (位置與縮放)
+    let itemX = 100;
+    let itemY = 100;
+    let itemScale = 1;
+
+    // 拖曳控制
+    let isDragging = false;
+    let startX, startY;
+
+    // --- 繪製畫布 ---
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. 畫基底圖 (半透明參考用)
+        if (baseImg.src) {
+            ctx.globalAlpha = 0.4; // 半透明
+            ctx.drawImage(baseImg, 0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 1.0;
+        }
+
+        // 2. 畫配件圖
+        if (processedItemImg.src) {
+            const w = processedItemImg.width * itemScale;
+            const h = processedItemImg.height * itemScale;
+            ctx.drawImage(processedItemImg, itemX, itemY, w, h);
+        }
+    }
+
+    // --- 自動去背處理 ---
+    function removeBackground(sourceImage, callback) {
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        tempCanvas.width = sourceImage.width;
+        tempCanvas.height = sourceImage.height;
+        tempCtx.drawImage(sourceImage, 0, 0);
+
+        try {
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const data = imageData.data;
+            const bgR = data[0], bgG = data[1], bgB = data[2], bgA = data[3];
+            
+            if (bgA > 0) {
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i], g = data[i+1], b = data[i+2];
+                    const distance = Math.sqrt((r-bgR)**2 + (g-bgG)**2 + (b-bgB)**2);
+                    if (distance <= 45) data[i+3] = 0; 
+                }
+                tempCtx.putImageData(imageData, 0, 0);
+            }
+            callback(tempCanvas.toDataURL('image/png'));
+        } catch (e) {
+            callback(sourceImage.src);
+        }
+    }
+
+    // --- 載入圖片事件 ---
+    baseInput.addEventListener('change', (e) => {
+        if (!e.target.files[0]) return;
+        baseImg.src = URL.createObjectURL(e.target.files[0]);
+        baseImg.onload = draw;
+    });
+
+    itemInput.addEventListener('change', (e) => {
+        if (!e.target.files[0]) return;
+        
+        // 🌟 魔法關鍵：在上傳的瞬間，把檔名（含副檔名）記下來！
+        originalItemFilename = e.target.files[0].name;
+        
+        itemImg.src = URL.createObjectURL(e.target.files[0]);
+        itemImg.onload = () => {
+            // 載入後先自動去背
+            removeBackground(itemImg, (dataUrl) => {
+                processedItemImg.src = dataUrl;
+                processedItemImg.onload = () => {
+                    // 將配件重置到畫面中間
+                    itemScale = 1;
+                    scaleSlider.value = 1;
+                    itemX = (canvas.width - processedItemImg.width) / 2;
+                    itemY = (canvas.height - processedItemImg.height) / 2;
+                    draw();
+                };
+            });
+        };
+    });
+
+    // --- 拖曳與縮放互動 ---
+    wrapper.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startX = e.clientX - itemX;
+        startY = e.clientY - itemY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            itemX = e.clientX - startX;
+            itemY = e.clientY - startY;
+            draw();
+        }
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    // 滾輪縮放
+    wrapper.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const scaleAmount = -e.deltaY * 0.001;
+        itemScale = Math.max(0.1, Math.min(itemScale + scaleAmount, 3));
+        scaleSlider.value = itemScale;
+        draw();
+    });
+
+    // 滑桿縮放
+    scaleSlider.addEventListener('input', (e) => {
+        itemScale = parseFloat(e.target.value);
+        draw();
+    });
+
+    // --- 匯出功能 ---
+    downloadBtn.addEventListener('click', () => {
+        if (!processedItemImg.src) {
+            alert("請先載入配件圖片喔！");
+            return;
+        }
+
+        // 建立一個乾淨的畫布，【只畫配件，不畫基底圖】
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = 420;
+        exportCanvas.height = 620;
+        const exportCtx = exportCanvas.getContext('2d');
+
+        const w = processedItemImg.width * itemScale;
+        const h = processedItemImg.height * itemScale;
+        exportCtx.drawImage(processedItemImg, itemX, itemY, w, h);
+
+        const link = document.createElement('a');
+        // 匯出時直接套用您原本的檔名
+        link.download = originalItemFilename;
+        link.href = exportCanvas.toDataURL('image/png');
+        link.click();
+
+        // 🌟 新增：下載完成後，自動清除配件，保留基底圖，迎接下一件衣服！
+        setTimeout(() => {
+            processedItemImg.removeAttribute('src'); // 徹底清除去背後的圖片資料
+            itemImg.removeAttribute('src');          // 徹底清除原始圖片資料
+            itemInput.value = '';                    // 清空上傳欄位 (這樣才能重複上傳同名檔案)
+            originalItemFilename = 'aligned_item.png'; // 重置檔名變數
+            draw(); // 重新繪製畫布（此時因為沒有配件了，畫布上只會畫出基底圖）
+        }, 100); // 稍微延遲 0.1 秒，確保瀏覽器已經成功觸發下載動作
+    });
+</script>
+
+</body>
+</html>

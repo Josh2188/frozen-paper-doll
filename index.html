@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>冰雪奇緣紙娃娃 - 智能分類平板版 👑❄️</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+<style>
+    :root {
+        --primary: #9b51e0;
+        --secondary: #ff69b4;
+        --bg-gradient: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+        --glass-bg: rgba(255, 255, 255, 0.75);
+        --glass-border: rgba(255, 255, 255, 0.5);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+        margin: 0; font-family: 'Nunito', 'Noto Sans TC', sans-serif;
+        background: var(--bg-gradient); height: 100vh; width: 100vw; overflow: hidden;
+    }
+
+    /* 🌟 核心改動 1：將原本的上下佈局改為左右滿版佈局 */
+    .app-container {
+        display: flex; flex-direction: row; width: 100%; height: 100%;
+        overflow: hidden;
+    }
+
+    /* --- 左側 2/3：大版面展示區 --- */
+    #left-panel {
+        flex: 2; /* 佔據 2/3 寬度 */
+        display: flex; justify-content: center; align-items: center;
+        position: relative; overflow: hidden; padding: 20px;
+    }
+
+    #doll-area {
+        position: relative; 
+        /* 讓畫布在平板上盡可能放大，維持 5:7 比例 */
+        height: 95%; max-height: none; aspect-ratio: 5 / 7; 
+        background-color: white; background-size: cover; background-position: center; 
+        border-radius: 24px; box-shadow: inset 0 0 20px rgba(0,0,0,0.1), 0 20px 40px rgba(0,0,0,0.2);
+        transition: background-image 0.8s ease-in-out; overflow: hidden;
+    }
+
+    #doll {
+        position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    }
+
+    .equip-layer {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        object-fit: contain; pointer-events: none; transition: opacity 0.3s ease;
+    }
+
+    /* --- 右側 1/3：整合功能列與衣櫃 --- */
+    #right-panel {
+        flex: 1; /* 佔據 1/3 寬度 */
+        background: var(--glass-bg);
+        border-left: 2px solid var(--glass-border);
+        display: flex; flex-direction: column; padding: 20px;
+        box-shadow: -5px 0 25px rgba(0,0,0,0.05);
+        z-index: 100; overflow-y: auto;
+    }
+
+    .controls-row {
+        display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;
+    }
+
+    .btn-action {
+        flex: 1; min-width: 80px;
+        padding: 10px 15px; font-size: 16px; font-weight: bold;
+        border: none; border-radius: 12px; cursor: pointer; transition: all 0.2s;
+        display: flex; justify-content: center; align-items: center; gap: 6px;
+        background: linear-gradient(45deg, var(--primary), var(--secondary));
+        color: white; box-shadow: 0 2px 10px rgba(155, 81, 224, 0.2);
+    }
+    .btn-action:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(155, 81, 224, 0.4); }
+    .btn-danger { background: white; color: #ff4d4f; border: 2px solid #ff4d4f; box-shadow: none; }
+    .btn-danger:hover { background: #fff1f0; }
+    .btn-photo { background: linear-gradient(45deg, #00d2ff, #3a7bd5); width: 100%; flex: none; margin-bottom: 5px; font-size: 18px; padding: 12px;}
+
+    .category-filters { 
+        display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; 
+        padding-bottom: 15px; border-bottom: 2px dashed rgba(0,0,0,0.1);
+    }
+
+    .filter-btn {
+        flex: 1 1 calc(33.333% - 8px); /* 一排三個 */
+        background: white; border: 2px solid #bae6fd; border-radius: 12px;
+        padding: 8px 5px; font-size: 15px; font-weight: bold; color: #0284c7;
+        cursor: pointer; transition: all 0.2s; text-align: center;
+    }
+    .filter-btn.active, .filter-btn:hover { background: #0284c7; color: white; border-color: #0284c7; }
+
+    /* 🌟 核心改動 2：右側衣櫃改為垂直網格滾動 */
+    #items {
+        display: grid; 
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); 
+        gap: 15px; align-content: start;
+        flex: 1; overflow-y: auto; padding: 5px; margin-bottom: 20px;
+    }
+    #items::-webkit-scrollbar { width: 6px; }
+    #items::-webkit-scrollbar-track { background: rgba(255,255,255,0.3); border-radius: 4px; }
+    #items::-webkit-scrollbar-thumb { background: var(--secondary); border-radius: 4px; }
+
+    .item {
+        width: 100%; aspect-ratio: 1 / 1; cursor: pointer; 
+        background: #e0f2fe; border: 3px solid transparent; border-radius: 16px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1); object-fit: contain; 
+        transition: all 0.2s ease;
+    }
+    .item:hover { transform: translateY(-3px) scale(1.05); border-color: var(--secondary); box-shadow: 0 8px 12px rgba(255, 105, 180, 0.3); }
+    .item.equipped { border-color: #ff69b4; background: #fce7f3; box-shadow: 0 0 15px rgba(255, 105, 180, 0.5); }
+
+    /* --- 新增：背景控制區 --- */
+    .bg-controls {
+        background: rgba(255,255,255,0.8); border-radius: 16px; padding: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    .bg-controls-title { font-weight: bold; color: #4a5568; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
+    .bg-btn-row { display: flex; gap: 10px; margin-bottom: 10px; }
+    .bg-btn { 
+        flex: 1; padding: 10px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; 
+        background: #f1f5f9; color: #475569; transition: 0.2s;
+    }
+    .bg-btn:hover { background: #e2e8f0; }
+    .bg-btn-auto { width: 100%; background: #8b5cf6; color: white; padding: 12px; border-radius: 10px; font-weight: bold; border: none; cursor: pointer; transition: 0.2s;}
+    .bg-btn-auto.paused { background: #cbd5e1; color: #475569; }
+
+    #loading-overlay {
+        position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(5px);
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        font-size: 24px; font-weight: bold; color: var(--primary);
+    }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- 左側主角區 (2/3) -->
+    <div id="left-panel">
+        <div id="doll-area">
+            <div id="doll">
+                <img id="layer-friend" class="equip-layer" style="z-index: 5;">
+                <img id="layer-base" class="equip-layer" style="z-index: 10;">
+                <img id="layer-shoes" class="equip-layer" style="z-index: 20;">
+                <img id="layer-clothes" class="equip-layer" style="z-index: 30;">
+                <img id="layer-necklace" class="equip-layer" style="z-index: 40;">
+                <img id="layer-earrings" class="equip-layer" style="z-index: 45;">
+                <img id="layer-hair" class="equip-layer" style="z-index: 50;">
+                <img id="layer-headwear" class="equip-layer" style="z-index: 60;">
+                <img id="layer-handheld" class="equip-layer" style="z-index: 70;">
+            </div>
+            
+            <div id="loading-overlay">
+                <i class="ph ph-camera" style="font-size: 64px; margin-bottom: 15px;"></i>
+                魔法相機沖印中...
+            </div>
+        </div>
+    </div>
+
+    <!-- 右側操作區 (1/3) -->
+    <div id="right-panel">
+        <div class="controls-row">
+            <button onclick="takePhoto()" class="btn-action btn-photo">
+                <i class="ph-fill ph-camera"></i> 魔法拍照
+            </button>
+            <button onclick="switchCharacter()" class="btn-action">
+                <i class="ph ph-arrows-left-right"></i> 換主角
+            </button>
+            <button onclick="clearAllAccessories()" class="btn-action btn-danger">
+                <i class="ph ph-trash"></i> 卸下全部
+            </button>
+        </div>
+        
+        <div class="category-filters" id="filters">
+            <button class="filter-btn active" data-filter="all">全部</button>
+            <button class="filter-btn" data-filter="headwear">A 頭飾</button>
+            <button class="filter-btn" data-filter="hair">H 頭髮</button>
+            <button class="filter-btn" data-filter="earrings">E 耳環</button>
+            <button class="filter-btn" data-filter="necklace">N 項鍊</button>
+            <button class="filter-btn" data-filter="clothes">C 衣服</button>
+            <button class="filter-btn" data-filter="handheld">W 手持</button>
+            <button class="filter-btn" data-filter="shoes">S 鞋子</button>
+            <button class="filter-btn" data-filter="friend">F 朋友</button>
+        </div>
+
+        <div id="items"></div>
+
+        <!-- 背景控制儀表板 -->
+        <div class="bg-controls">
+            <div class="bg-controls-title"><i class="ph-fill ph-image"></i> 場景背景控制</div>
+            <div class="bg-btn-row">
+                <button onclick="manualChangeBg(-1)" class="bg-btn"><i class="ph ph-caret-left"></i> 上一張</button>
+                <button onclick="manualChangeBg(1)" class="bg-btn">下一張 <i class="ph ph-caret-right"></i></button>
+            </div>
+            <button onclick="toggleAutoBg()" id="btn-autobg" class="bg-btn-auto">
+                🟢 自動輪播：開啟中
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==========================================
+// 1. 智能檔名自動探測系統 (保留原始強大功能)
+// ==========================================
+const wardrobe = document.getElementById('items');
+
+const categoriesToLoad = [
+    { prefix: 'A', type: 'headwear' },
+    { prefix: 'H', type: 'hair' },
+    { prefix: 'E', type: 'earrings' },
+    { prefix: 'N', type: 'necklace' },
+    { prefix: 'C', type: 'clothes' },
+    { prefix: 'W', type: 'handheld' },
+    { prefix: 'S', type: 'shoes' },
+    { prefix: 'F', type: 'friend' }
+];
+
+function autoLoadAccessories() {
+    wardrobe.innerHTML = ''; 
+    const excludeFiles = ['anna-base.jpg', 'elsa-base.jpg', 'anna-base.png', 'elsa-base.png'];
+    
+    categoriesToLoad.forEach(cat => {
+        let currentIndex = 1; 
+        
+        function tryLoadNext() {
+            const paddedIndex = String(currentIndex).padStart(2, '0');
+            
+            const possibleNames = [
+                `${cat.prefix}${paddedIndex}.png`,       
+                `${cat.prefix}${paddedIndex}.jpg`,       
+                `${cat.prefix}${paddedIndex}.PNG`,       
+                `${cat.prefix}${paddedIndex}.JPG`,       
+                `${cat.prefix.toLowerCase()}${paddedIndex}.png`, 
+                `${cat.prefix.toLowerCase()}${paddedIndex}.jpg`  
+            ];
+            
+            let currentNameIndex = 0;
+
+            function testNextName() {
+                if (currentNameIndex >= possibleNames.length) return; 
+                
+                const testSrc = possibleNames[currentNameIndex];
+                
+                if (excludeFiles.includes(testSrc.toLowerCase())) {
+                    currentNameIndex++;
+                    testNextName();
+                    return;
+                }
+                
+                const tempImg = new Image();
+                
+                tempImg.onload = () => {
+                    const img = document.createElement('img');
+                    img.className = 'item';
+                    img.dataset.category = cat.type; 
+                    img.src = testSrc;
+                    
+                    // 點擊事件綁定
+                    img.onclick = () => { equipItem(testSrc, cat.type, img); };
+                    
+                    wardrobe.appendChild(img);
+                    currentIndex++;
+                    tryLoadNext(); 
+                };
+                
+                tempImg.onerror = () => {
+                    currentNameIndex++;
+                    testNextName();
+                };
+                
+                tempImg.src = testSrc; 
+            }
+            testNextName(); 
+        }
+        tryLoadNext();
+    });
+}
+
+// ==========================================
+// 2. 核心換裝邏輯 (🌟 核心改動 3：加入 Toggle 開關邏輯)
+// ==========================================
+const allCategories = ['shoes', 'clothes', 'necklace', 'earrings', 'hair', 'headwear', 'handheld', 'friend'];
+
+function equipItem(src, category, imgElement) {
+    const layer = document.getElementById(`layer-${category}`);
+    if (layer) {
+        // 取得當前圖層的圖片檔名，用來判斷是否已經穿戴
+        const currentSrc = layer.getAttribute('src');
+        
+        // 如果目前穿戴的就是點擊的這件，則「卸下」 (Toggle 關閉)
+        if (currentSrc === src) {
+            layer.src = '';
+            layer.style.opacity = '0';
+            imgElement.classList.remove('equipped');
+        } else {
+            // 否則「穿上」或「換一件」 (Toggle 開啟)
+            layer.src = src; 
+            layer.style.opacity = '0';
+            setTimeout(() => layer.style.opacity = '1', 50);
+            
+            // 清除該分類其他按鈕的高亮狀態，並把當前點擊的高亮
+            document.querySelectorAll(`.item[data-category="${category}"]`).forEach(el => el.classList.remove('equipped'));
+            imgElement.classList.add('equipped');
+        }
+    }
+}
+
+function clearAllAccessories() {
+    allCategories.forEach(cat => {
+        const layer = document.getElementById(`layer-${cat}`);
+        if(layer) {
+            layer.src = ''; 
+            layer.style.opacity = '0';
+        }
+    });
+    // 清除衣櫃所有高亮狀態
+    document.querySelectorAll('.item').forEach(el => el.classList.remove('equipped'));
+}
+
+// ==========================================
+// 3. 初始化基底與篩選器
+// ==========================================
+let currentCharacter = 'elsa';
+
+function setBaseImage(char) {
+    const baseImg = document.getElementById('layer-base');
+    const targetSrc = char === 'elsa' ? 'elsa-base.png' : 'anna-base.png';
+    baseImg.src = targetSrc;
+    
+    baseImg.onerror = () => {
+        const bgColor = char === 'elsa' ? '%2300d2ff' : '%239b51e0';
+        baseImg.src = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='420' height='620'><rect width='420' height='620' fill='${bgColor}'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='24' font-family='sans-serif'>找不到 ${targetSrc}</text></svg>`;
+    };
+}
+
+function switchCharacter() {
+    currentCharacter = currentCharacter === 'elsa' ? 'anna' : 'elsa';
+    setBaseImage(currentCharacter);
+    clearAllAccessories(); 
+}
+
+// 分類篩選器綁定
+document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.onclick = (e) => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        
+        const targetCategory = e.target.dataset.filter;
+        const allItems = document.querySelectorAll('.item');
+        
+        allItems.forEach(item => {
+            if (targetCategory === 'all' || item.dataset.category === targetCategory) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+});
+
+// ==========================================
+// 4. 背景手動/自動輪播控制系統 (🌟 核心改動 4)
+// ==========================================
+const bgList = ['bg1.jpg', 'bg2.jpg', 'bg3.jpg', 'bg4.jpg', 'bg5.jpg'];
+let currentBgIndex = 0;
+let isAutoBg = true;
+let autoTimer = null;
+const dollArea = document.getElementById('doll-area');
+
+// 渲染當前背景
+function applyBg() {
+    const bgUrl = bgList[currentBgIndex];
+    const tempImg = new Image();
+    tempImg.src = bgUrl;
+    tempImg.onload = () => { dollArea.style.backgroundImage = `url(${bgUrl})`; };
+    tempImg.onerror = () => { dollArea.style.backgroundColor = '#e0f7fa'; };
+}
+
+// 啟動計時器 (30秒換一次，依照您原本的設定)
+function startAutoTimer() {
+    if (autoTimer) clearInterval(autoTimer);
+    if (isAutoBg) {
+        autoTimer = setInterval(() => {
+            currentBgIndex = (currentBgIndex + 1) % bgList.length;
+            applyBg();
+        }, 30000); 
+    }
+}
+
+// 手動切換 (上/下一張)
+function manualChangeBg(direction) {
+    currentBgIndex = (currentBgIndex + direction + bgList.length) % bgList.length;
+    applyBg();
+    
+    // 手動切換後重置計時器，避免馬上又被自動切換
+    if (isAutoBg) startAutoTimer();
+}
+
+// 開關自動切換功能
+function toggleAutoBg() {
+    isAutoBg = !isAutoBg;
+    const btn = document.getElementById('btn-autobg');
+    if (isAutoBg) {
+        btn.innerHTML = '🟢 自動輪播：開啟中';
+        btn.classList.remove('paused');
+        startAutoTimer();
+    } else {
+        btn.innerHTML = '⚪ 自動輪播：已暫停';
+        btn.classList.add('paused');
+        clearInterval(autoTimer);
+    }
+}
+
+// ==========================================
+// 5. 魔法相機 (保留您的無殘影、防卡死原版程式碼)
+// ==========================================
+function takePhoto() {
+    const targetArea = document.getElementById('doll-area');
+    const overlay = document.getElementById('loading-overlay');
+    overlay.style.opacity = '1'; 
+    
+    setTimeout(() => {
+        html2canvas(targetArea, {
+            useCORS: true, 
+            allowTaint: true, 
+            backgroundColor: null, 
+            scale: 2,
+            ignoreElements: (element) => element.id === 'loading-overlay' 
+        }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `魔法小公主_${new Date().getTime()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }).catch(err => {
+            console.error('截圖錯誤：', err);
+            alert('魔法相機遇到了一點阻礙（可能需要將網頁發布至 GitHub Pages 後才能正常截圖喔）！');
+        }).finally(() => {
+            overlay.style.opacity = '0';
+        });
+    }, 400); 
+}
+
+// ==========================================
+// 網頁載入時啟動
+// ==========================================
+window.onload = () => { 
+    setBaseImage('elsa'); 
+    autoLoadAccessories(); 
+    applyBg(); // 初始背景
+    startAutoTimer(); // 啟動背景計時
+};
+</script>
+</body>
+</html>
